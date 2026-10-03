@@ -1,5 +1,7 @@
 package build.skir
 
+import build.skir.internal.BinaryDecoding
+import build.skir.internal.JsonDecoding
 import build.skir.internal.SerializerImpl
 import build.skir.internal.formatDenseJson
 import build.skir.internal.formatReadableJson
@@ -145,6 +147,15 @@ class Serializer<T> internal constructor(
         jsonCode: String,
         unrecognizedValues: UnrecognizedValuesPolicy,
     ): T {
+        return fromJsonCode(jsonCode, unrecognizedValues, DEFAULT_MAX_JSON_NESTING_DEPTH)
+    }
+
+    fun fromJsonCode(
+        jsonCode: String,
+        unrecognizedValues: UnrecognizedValuesPolicy,
+        maxNestingDepth: Int,
+    ): T {
+        JsonDecoding.requireWithinLimit(jsonCode, maxNestingDepth)
         val keepUnrecognizedValues = unrecognizedValues == UnrecognizedValuesPolicy.KEEP
         val jsonElement = Json.Default.decodeFromString(JsonElement.serializer(), jsonCode)
         return this.impl.fromJson(jsonElement, keepUnrecognizedValues = keepUnrecognizedValues)
@@ -213,9 +224,17 @@ class Serializer<T> internal constructor(
         bytes: ByteArray,
         unrecognizedValues: UnrecognizedValuesPolicy,
     ): T {
+        return fromBytes(bytes, unrecognizedValues, DEFAULT_MAX_BINARY_NESTING_DEPTH)
+    }
+
+    fun fromBytes(
+        bytes: ByteArray,
+        unrecognizedValues: UnrecognizedValuesPolicy,
+        maxNestingDepth: Int,
+    ): T {
         val buffer = Buffer()
         buffer.write(bytes)
-        return this.fromBytes(buffer, unrecognizedValues)
+        return this.fromBytes(buffer, unrecognizedValues, maxNestingDepth)
     }
 
     /**
@@ -240,28 +259,43 @@ class Serializer<T> internal constructor(
         bytes: ByteString,
         unrecognizedValues: UnrecognizedValuesPolicy,
     ): T {
+        return fromBytes(bytes, unrecognizedValues, DEFAULT_MAX_BINARY_NESTING_DEPTH)
+    }
+
+    fun fromBytes(
+        bytes: ByteString,
+        unrecognizedValues: UnrecognizedValuesPolicy,
+        maxNestingDepth: Int,
+    ): T {
         val buffer = Buffer()
         buffer.write(bytes)
-        return this.fromBytes(buffer, unrecognizedValues)
+        return this.fromBytes(buffer, unrecognizedValues, maxNestingDepth)
     }
 
     private fun fromBytes(
         buffer: Buffer,
         unrecognizedValues: UnrecognizedValuesPolicy,
+        maxNestingDepth: Int,
     ): T {
-        return if (buffer.readByte().toInt() == 's'.code &&
-            buffer.readByte().toInt() == 'k'.code &&
-            buffer.readByte().toInt() == 'i'.code &&
-            buffer.readByte().toInt() == 'r'.code
-        ) {
-            val keepUnrecognizedValues = unrecognizedValues == UnrecognizedValuesPolicy.KEEP
-            val result = this.impl.decode(buffer, keepUnrecognizedValues = keepUnrecognizedValues)
-            if (!buffer.exhausted()) {
-                throw IllegalArgumentException("Extra bytes after deserialization")
+        return BinaryDecoding.withLimit(maxNestingDepth) {
+            val prefix = buffer.peek()
+            val isBinary =
+                prefix.request(4) &&
+                    prefix.readByte().toInt() == 's'.code &&
+                    prefix.readByte().toInt() == 'k'.code &&
+                    prefix.readByte().toInt() == 'i'.code &&
+                    prefix.readByte().toInt() == 'r'.code
+            if (isBinary) {
+                buffer.skip(4)
+                val keepUnrecognizedValues = unrecognizedValues == UnrecognizedValuesPolicy.KEEP
+                val result = this.impl.decode(buffer, keepUnrecognizedValues = keepUnrecognizedValues)
+                if (!buffer.exhausted()) {
+                    throw IllegalArgumentException("Extra bytes after deserialization")
+                }
+                result
+            } else {
+                this.fromJsonCode(buffer.readUtf8(), unrecognizedValues)
             }
-            result
-        } else {
-            this.fromJsonCode(buffer.readUtf8(), unrecognizedValues)
         }
     }
 
@@ -273,4 +307,9 @@ class Serializer<T> internal constructor(
      */
     @get:JvmName("typeDescriptor")
     val typeDescriptor: TypeDescriptor.Reflective<T> = impl.typeDescriptor
+
+    private companion object {
+        const val DEFAULT_MAX_BINARY_NESTING_DEPTH = 2112
+        const val DEFAULT_MAX_JSON_NESTING_DEPTH = 576
+    }
 }

@@ -1,5 +1,6 @@
 package build.skir
 
+import build.skir.internal.BinaryDecoding
 import build.skir.internal.INDENT_UNIT
 import build.skir.internal.SerializerImpl
 import build.skir.internal.decodeNumber
@@ -831,11 +832,16 @@ private class OptionalSerializer<T : Any>(val other: SerializerImpl<T>) :
         buffer: BufferedSource,
         keepUnrecognizedValues: Boolean,
     ): T? {
-        return if (buffer.peek().readByte().toInt() and 0xFF == 255) {
-            buffer.skip(1)
-            null
-        } else {
-            this.other.decode(buffer, keepUnrecognizedValues = keepUnrecognizedValues)
+        BinaryDecoding.enter()
+        try {
+            return if (buffer.peek().readByte().toInt() and 0xFF == 255) {
+                buffer.skip(1)
+                null
+            } else {
+                this.other.decode(buffer, keepUnrecognizedValues = keepUnrecognizedValues)
+            }
+        } finally {
+            BinaryDecoding.exit()
         }
     }
 
@@ -909,11 +915,16 @@ private class JavaOptionalSerializer<T : Any>(val other: SerializerImpl<T>) :
         buffer: BufferedSource,
         keepUnrecognizedValues: Boolean,
     ): java.util.Optional<T> {
-        return if (buffer.peek().readByte().toInt() and 0xFF == 255) {
-            buffer.skip(1)
-            java.util.Optional.empty()
-        } else {
-            java.util.Optional.of(this.other.decode(buffer, keepUnrecognizedValues = keepUnrecognizedValues))
+        BinaryDecoding.enter()
+        try {
+            return if (buffer.peek().readByte().toInt() and 0xFF == 255) {
+                buffer.skip(1)
+                java.util.Optional.empty()
+            } else {
+                java.util.Optional.of(this.other.decode(buffer, keepUnrecognizedValues = keepUnrecognizedValues))
+            }
+        } finally {
+            BinaryDecoding.exit()
         }
     }
 

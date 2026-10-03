@@ -305,49 +305,54 @@ class StructSerializer<Frozen : Any, Mutable : Any>(
         buffer: BufferedSource,
         keepUnrecognizedValues: Boolean,
     ): Frozen {
-        val wire = buffer.readByte().toInt() and 0xFF
-        if (wire == 0 || wire == 246) {
-            return defaultInstance
-        }
-        val mutable = newMutableFn(null)
-        val encodedSlotCount =
-            if (wire == 250) {
-                decodeNumber(buffer).toInt()
-            } else {
-                wire - 246
+        BinaryDecoding.enter()
+        try {
+            val wire = buffer.readByte().toInt() and 0xFF
+            if (wire == 0 || wire == 246) {
+                return defaultInstance
             }
-        // Do not read more slots than the number of recognized slots.
-        for (i in 0 until encodedSlotCount.coerceAtMost(slotCountInclRemoved)) {
-            val field = slotToField[i]
-            if (field != null) {
-                field.decodeValue(mutable, buffer, keepUnrecognizedValues = keepUnrecognizedValues)
-            } else {
-                // The field was removed.
-                decodeUnused(buffer)
-            }
-        }
-        if (encodedSlotCount > slotCountInclRemoved) {
-            // We have some unrecognized fields.
-            if (keepUnrecognizedValues) {
-                val peekBuffer = buffer.peek()
-                var unrecognizedByteCount = 0L
-                for (i in slotCountInclRemoved until encodedSlotCount) {
-                    unrecognizedByteCount += decodeUnused(peekBuffer)
+            val mutable = newMutableFn(null)
+            val encodedSlotCount =
+                if (wire == 250) {
+                    decodeNumber(buffer).toInt()
+                } else {
+                    wire - 246
                 }
-                val unrecognizedBytes = buffer.readByteString(unrecognizedByteCount)
-                val unrecognizedFields =
-                    UnrecognizedFields<Frozen>(
-                        encodedSlotCount,
-                        unrecognizedBytes,
-                    )
-                setUnrecognizedFields(mutable, unrecognizedFields)
-            } else {
-                for (i in slotCountInclRemoved until encodedSlotCount) {
+            // Do not read more slots than the number of recognized slots.
+            for (i in 0 until encodedSlotCount.coerceAtMost(slotCountInclRemoved)) {
+                val field = slotToField[i]
+                if (field != null) {
+                    field.decodeValue(mutable, buffer, keepUnrecognizedValues = keepUnrecognizedValues)
+                } else {
+                    // The field was removed.
                     decodeUnused(buffer)
                 }
             }
+            if (encodedSlotCount > slotCountInclRemoved) {
+                // We have some unrecognized fields.
+                if (keepUnrecognizedValues) {
+                    val peekBuffer = buffer.peek()
+                    var unrecognizedByteCount = 0L
+                    for (i in slotCountInclRemoved until encodedSlotCount) {
+                        unrecognizedByteCount += decodeUnused(peekBuffer)
+                    }
+                    val unrecognizedBytes = buffer.readByteString(unrecognizedByteCount)
+                    val unrecognizedFields =
+                        UnrecognizedFields<Frozen>(
+                            encodedSlotCount,
+                            unrecognizedBytes,
+                        )
+                    setUnrecognizedFields(mutable, unrecognizedFields)
+                } else {
+                    for (i in slotCountInclRemoved until encodedSlotCount) {
+                        decodeUnused(buffer)
+                    }
+                }
+            }
+            return toFrozen(mutable)
+        } finally {
+            BinaryDecoding.exit()
         }
-        return toFrozen(mutable)
     }
 
     override fun appendString(

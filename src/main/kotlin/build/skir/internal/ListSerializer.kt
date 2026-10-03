@@ -57,27 +57,32 @@ private abstract class AbstractListSerializer<E, L : List<E>>(
         buffer: BufferedSource,
         keepUnrecognizedValues: Boolean,
     ): L {
-        val wire = buffer.readByte().toInt() and 0xFF
-        if (wire == 0 || wire == 246) {
-            return emptyList
-        }
-        val size =
-            when (wire) {
-                250 -> {
-                    decodeNumber(buffer).toInt()
-                }
-                in 247..249 -> {
-                    wire - 246
-                }
-                else -> {
-                    throw IllegalArgumentException("Expected: list; wire: $wire")
-                }
+        BinaryDecoding.enter()
+        try {
+            val wire = buffer.readByte().toInt() and 0xFF
+            if (wire == 0 || wire == 246) {
+                return emptyList
             }
-        val items = mutableListOf<E>()
-        for (i in 0 until size) {
-            items.add(item.decode(buffer, keepUnrecognizedValues = keepUnrecognizedValues))
+            val size =
+                when (wire) {
+                    250 -> {
+                        decodeNumber(buffer).toInt()
+                    }
+                    in 247..249 -> {
+                        wire - 246
+                    }
+                    else -> {
+                        throw IllegalArgumentException("Expected: list; wire: $wire")
+                    }
+                }
+            val items = mutableListOf<E>()
+            for (i in 0 until size) {
+                items.add(item.decode(buffer, keepUnrecognizedValues = keepUnrecognizedValues))
+            }
+            return toList(items)
+        } finally {
+            BinaryDecoding.exit()
         }
-        return toList(items)
     }
 
     final override fun toJson(

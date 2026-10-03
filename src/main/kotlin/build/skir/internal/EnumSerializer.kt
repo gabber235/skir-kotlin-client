@@ -439,58 +439,63 @@ class EnumSerializer<Enum : Any> private constructor(
         buffer: BufferedSource,
         keepUnrecognizedValues: Boolean,
     ): Enum {
-        val wire = buffer.buffer.readByte().toInt() and 0xFF
-        if (wire < 242) {
-            // A number: rewind
-            val number = decodeNumberPastWire(buffer, wire).toInt()
-            return when (val variant = numberToVariant[number]) {
-                is RemovedNumber -> unknown.constant
-                is UnknownVariant -> unknown.constant
-                is ConstantVariant<Enum> -> variant.constant
-                is WrapperVariant<Enum, *> -> WrapperVariant.wrapDefault(variant)
-                null -> {
-                    if (keepUnrecognizedValues) {
-                        val bytes = Buffer()
-                        encodeInt32(number, bytes)
-                        unknown.wrapUnrecognized(UnrecognizedVariant(bytes.readByteString()))
-                    } else {
-                        unknown.constant
+        BinaryDecoding.enter()
+        try {
+            val wire = buffer.buffer.readByte().toInt() and 0xFF
+            if (wire < 242) {
+                // A number: rewind
+                val number = decodeNumberPastWire(buffer, wire).toInt()
+                return when (val variant = numberToVariant[number]) {
+                    is RemovedNumber -> unknown.constant
+                    is UnknownVariant -> unknown.constant
+                    is ConstantVariant<Enum> -> variant.constant
+                    is WrapperVariant<Enum, *> -> WrapperVariant.wrapDefault(variant)
+                    null -> {
+                        if (keepUnrecognizedValues) {
+                            val bytes = Buffer()
+                            encodeInt32(number, bytes)
+                            unknown.wrapUnrecognized(UnrecognizedVariant(bytes.readByteString()))
+                        } else {
+                            unknown.constant
+                        }
                     }
                 }
-            }
-        } else {
-            val number = if (wire == 248) decodeNumber(buffer).toInt() else wire - 250
-            return when (val variant = numberToVariant[number]) {
-                is RemovedNumber -> {
-                    decodeUnused(buffer)
-                    unknown.constant
-                }
-                is UnknownVariant -> throw IllegalArgumentException(
-                    "$number refers to a constant variant",
-                )
-                is ConstantVariant<Enum> -> {
-                    decodeUnused(buffer)
-                    variant.constant
-                }
-                is WrapperVariant<Enum, *> ->
-                    WrapperVariant.wrapDecoded(
-                        variant,
-                        buffer,
-                        keepUnrecognizedValues = keepUnrecognizedValues,
-                    )
-                null -> {
-                    if (keepUnrecognizedValues) {
-                        unknown.wrapUnrecognized(
-                            UnrecognizedVariant(
-                                readUnrecognizedWrapperBytes(number, wire, buffer),
-                            ),
-                        )
-                    } else {
+            } else {
+                val number = if (wire == 248) decodeNumber(buffer).toInt() else wire - 250
+                return when (val variant = numberToVariant[number]) {
+                    is RemovedNumber -> {
                         decodeUnused(buffer)
                         unknown.constant
                     }
+                    is UnknownVariant -> throw IllegalArgumentException(
+                        "$number refers to a constant variant",
+                    )
+                    is ConstantVariant<Enum> -> {
+                        decodeUnused(buffer)
+                        variant.constant
+                    }
+                    is WrapperVariant<Enum, *> ->
+                        WrapperVariant.wrapDecoded(
+                            variant,
+                            buffer,
+                            keepUnrecognizedValues = keepUnrecognizedValues,
+                        )
+                    null -> {
+                        if (keepUnrecognizedValues) {
+                            unknown.wrapUnrecognized(
+                                UnrecognizedVariant(
+                                    readUnrecognizedWrapperBytes(number, wire, buffer),
+                                ),
+                            )
+                        } else {
+                            decodeUnused(buffer)
+                            unknown.constant
+                        }
+                    }
                 }
             }
+        } finally {
+            BinaryDecoding.exit()
         }
     }
 

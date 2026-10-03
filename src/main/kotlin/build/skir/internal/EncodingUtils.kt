@@ -102,55 +102,60 @@ fun decodeNumberAndCountBytes(buffer: BufferedSource): Pair<Number, Int> {
 }
 
 fun decodeUnused(buffer: BufferedSource): Long {
-    val wire = buffer.readByte().toInt() and 0xFF
-    if (wire < 232) {
-        return 1
-    }
-
-    when (wire - 232) {
-        0, 4 -> { // uint16, uint16 - 65536
-            buffer.skip(2)
-            return 3
-        }
-        1, 5, 8 -> { // uint32, int32, float32
-            buffer.skip(4)
-            return 5
-        }
-        2, 6, 7, 9 -> { // uint64, int64, int64 timestamp, float64
-            buffer.skip(8)
-            return 9
-        }
-        3 -> { // uint8 - 256
-            buffer.skip(1)
-            return 2
-        }
-        11, 13 -> { // string, bytes
-            val (length, lengthByteCount) = decodeNumberAndCountBytes(buffer)
-            val lengthLong = length.toLong()
-            buffer.skip(lengthLong)
-            return 1 + lengthByteCount + lengthLong
-        }
-        15, 19, 20, 21, 22 -> { // array length==1, enum value kind==1-4
-            return 1 + decodeUnused(buffer)
-        }
-        16 -> { // array length==2
-            return 1 + decodeUnused(buffer) + decodeUnused(buffer)
-        }
-        17 -> { // array length==3
-            return 1 + decodeUnused(buffer) + decodeUnused(buffer) + decodeUnused(buffer)
-        }
-        18 -> { // array length==N
-            val (length, lengthByteCount) = decodeNumberAndCountBytes(buffer)
-            val lengthLong = length.toLong()
-            var result = 1L + lengthByteCount
-            for (i in 0L until lengthLong) {
-                result += decodeUnused(buffer)
-            }
-            return result
-        }
-        else -> {
-            // 10, 12
+    BinaryDecoding.enter()
+    try {
+        val wire = buffer.readByte().toInt() and 0xFF
+        if (wire < 232) {
             return 1
         }
+
+        when (wire - 232) {
+            0, 4 -> { // uint16, uint16 - 65536
+                buffer.skip(2)
+                return 3
+            }
+            1, 5, 8 -> { // uint32, int32, float32
+                buffer.skip(4)
+                return 5
+            }
+            2, 6, 7, 9 -> { // uint64, int64, int64 timestamp, float64
+                buffer.skip(8)
+                return 9
+            }
+            3 -> { // uint8 - 256
+                buffer.skip(1)
+                return 2
+            }
+            11, 13 -> { // string, bytes
+                val (length, lengthByteCount) = decodeNumberAndCountBytes(buffer)
+                val lengthLong = length.toLong()
+                buffer.skip(lengthLong)
+                return 1 + lengthByteCount + lengthLong
+            }
+            15, 19, 20, 21, 22 -> { // array length==1, enum value kind==1-4
+                return 1 + decodeUnused(buffer)
+            }
+            16 -> { // array length==2
+                return 1 + decodeUnused(buffer) + decodeUnused(buffer)
+            }
+            17 -> { // array length==3
+                return 1 + decodeUnused(buffer) + decodeUnused(buffer) + decodeUnused(buffer)
+            }
+            18 -> { // array length==N
+                val (length, lengthByteCount) = decodeNumberAndCountBytes(buffer)
+                val lengthLong = length.toLong()
+                var result = 1L + lengthByteCount
+                for (i in 0L until lengthLong) {
+                    result += decodeUnused(buffer)
+                }
+                return result
+            }
+            else -> {
+                // 10, 12
+                return 1
+            }
+        }
+    } finally {
+        BinaryDecoding.exit()
     }
 }
