@@ -91,5 +91,7 @@ mavenPublishing {
     publishToMavenCentral(SonatypeHost.CENTRAL_PORTAL)
 
     // Enable GPG signing for all publications
-    signAllPublications()
+    if (System.getenv("JITPACK") != "true") {
+        signAllPublications()
+    }
 }
