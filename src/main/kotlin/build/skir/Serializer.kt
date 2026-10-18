@@ -287,6 +287,7 @@ class Serializer<T> internal constructor(
                     prefix.readByte().toInt() == 'r'.code
             if (isBinary) {
                 buffer.skip(4)
+                BinaryDecoding.requireWithinLimit(buffer.peek(), maxNestingDepth)
                 val keepUnrecognizedValues = unrecognizedValues == UnrecognizedValuesPolicy.KEEP
                 val result = this.impl.decode(buffer, keepUnrecognizedValues = keepUnrecognizedValues)
                 if (!buffer.exhausted()) {
