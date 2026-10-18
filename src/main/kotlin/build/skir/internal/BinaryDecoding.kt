@@ -36,11 +36,13 @@ internal object BinaryDecoding {
                 remaining.removeLast()
                 continue
             }
-            require(remaining.size <= maxNestingDepth) {
-                "Maximum binary nesting depth $maxNestingDepth exceeded"
-            }
             remaining[remaining.lastIndex] -= 1L
             val wire = input.readByte().toInt() and 0xFF
+            if (wire in 246..254) {
+                require(remaining.size <= maxNestingDepth) {
+                    "Maximum binary nesting depth $maxNestingDepth exceeded"
+                }
+            }
             val children =
                 when (wire) {
                     232, 236 -> {
