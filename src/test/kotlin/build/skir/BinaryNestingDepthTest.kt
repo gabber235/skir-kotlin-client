@@ -50,6 +50,16 @@ class BinaryNestingDepthTest {
     }
 
     @Test
+    fun `primitive collection elements do not consume container nesting depth`() {
+        val integers = Serializers.list(Serializers.int32)
+        val value = listOf(1, 2, 3, 4)
+
+        assertThat(
+            integers.fromBytes(integers.toBytes(value), UnrecognizedValuesPolicy.DROP, maxNestingDepth = 1),
+        ).isEqualTo(value)
+    }
+
+    @Test
     fun `callers can choose a stricter binary nesting limit`() {
         val failure =
             assertThrows<IllegalArgumentException> {
