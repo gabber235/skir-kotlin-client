@@ -36,6 +36,20 @@ class BinaryNestingDepthTest {
     }
 
     @Test
+    fun `excessive nesting is rejected before constructing decoded values`() {
+        var constructed = 0
+        val checked = recursiveSerializer(onCreate = { constructed += 1 })
+
+        val failure =
+            assertThrows<IllegalArgumentException> {
+                checked.fromBytes(nestedBytes(10_000))
+            }
+
+        assertThat(failure).hasMessageThat().contains("Maximum binary nesting depth")
+        assertThat(constructed).isEqualTo(0)
+    }
+
+    @Test
     fun `callers can choose a stricter binary nesting limit`() {
         val failure =
             assertThrows<IllegalArgumentException> {
@@ -266,12 +280,18 @@ class BinaryNestingDepthTest {
 
     private val serializer: Serializer<RecursiveValue> = recursiveSerializer()
 
-    private fun recursiveSerializer(onChild: () -> Unit = {}): Serializer<RecursiveValue> =
+    private fun recursiveSerializer(
+        onCreate: () -> Unit = {},
+        onChild: () -> Unit = {},
+    ): Serializer<RecursiveValue> =
         StructSerializer<RecursiveValue, MutableRecursiveValue>(
             recordId = "test:RecursiveValue",
             doc = "",
             defaultInstance = RecursiveValue(),
-            newMutableFn = { MutableRecursiveValue(it?.child, it?.unrecognizedFields) },
+            newMutableFn = {
+                onCreate()
+                MutableRecursiveValue(it?.child, it?.unrecognizedFields)
+            },
             toFrozenFn = { RecursiveValue(it.child, it.unrecognizedFields) },
             getUnrecognizedFields = RecursiveValue::unrecognizedFields,
             setUnrecognizedFields = { value, fields -> value.unrecognizedFields = fields },
